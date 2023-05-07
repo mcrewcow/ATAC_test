@@ -109,3 +109,80 @@ FeaturePlot(
   ncol = 3
 )
 
+# Load the pre-processed scRNA-seq data for PBMCs
+pbmc_rna <- readRDS("G://pbmc_10k_v3.rds")
+
+transfer.anchors <- FindTransferAnchors(
+    reference = pbmc_rna,
+    query = pbmc,
+    reduction = 'cca'
+)
+
+predicted.labels <- TransferData(
+    anchorset = transfer.anchors,
+    refdata = pbmc_rna$celltype,
+    weight.reduction = pbmc[['lsi']],
+    dims = 2:30
+)
+
+pbmc <- AddMetaData(object = pbmc, metadata = predicted.labels)
+
+plot1 <- DimPlot(
+  object = pbmc_rna,
+  group.by = 'celltype',
+  label = TRUE,
+  repel = TRUE) + NoLegend() + ggtitle('scRNA-seq')
+
+plot2 <- DimPlot(
+  object = pbmc,
+  group.by = 'predicted.id',
+  label = TRUE,
+  repel = TRUE) + NoLegend() + ggtitle('scATAC-seq')
+
+plot1 + plot2
+
+pbmc <- subset(pbmc, idents = 14, invert = TRUE)
+pbmc <- RenameIdents(
+  object = pbmc,
+  '0' = 'CD14 Mono',
+  '1' = 'CD4 Memory',
+  '2' = 'CD8 Effector',
+  '3' = 'CD4 Naive',
+  '4' = 'CD14 Mono',
+  '5' = 'DN T',
+  '6' = 'CD8 Naive',
+  '7' = 'NK CD56Dim',
+  '8' = 'pre-B',
+  '9' = 'CD16 Mono',
+  '10' = 'pro-B',
+  '11' = 'DC',
+  '12' = 'NK CD56bright',
+  '13' = 'pDC'
+)
+
+# change back to working with peaks instead of gene activities
+DefaultAssay(pbmc) <- 'peaks'
+
+da_peaks <- FindMarkers(
+  object = pbmc,
+  ident.1 = "CD4 Naive",
+  ident.2 = "CD14 Mono",
+  test.use = 'LR',
+  latent.vars = 'peak_region_fragments'
+)
+
+head(da_peaks)
+
+plot1 <- VlnPlot(
+  object = pbmc,
+  features = rownames(da_peaks)[1],
+  pt.size = 0.1,
+  idents = c("CD4 Naive","CD14 Mono")
+)
+plot2 <- FeaturePlot(
+  object = pbmc,
+  features = rownames(da_peaks)[1],
+  pt.size = 0.1
+)
+
+plot1 | plot2
