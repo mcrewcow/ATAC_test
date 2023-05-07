@@ -186,3 +186,97 @@ plot2 <- FeaturePlot(
 )
 
 plot1 | plot2
+
+fc <- FoldChange(pbmc, ident.1 = "CD4 Naive", ident.2 = "CD14 Mono")
+head(fc)
+
+open_cd4naive <- rownames(da_peaks[da_peaks$avg_log2FC > 3, ])
+open_cd14mono <- rownames(da_peaks[da_peaks$avg_log2FC < -3, ])
+
+closest_genes_cd4naive <- ClosestFeature(pbmc, regions = open_cd4naive)
+closest_genes_cd14mono <- ClosestFeature(pbmc, regions = open_cd14mono)
+
+# set plotting order
+levels(pbmc) <- c("CD4 Naive","CD4 Memory","CD8 Naive","CD8 Effector","DN T","NK CD56bright","NK CD56Dim","pre-B",'pro-B',"pDC","DC","CD14 Mono",'CD16 Mono')
+
+CoveragePlot(
+  object = pbmc,
+  region = rownames(da_peaks)[1],
+  extend.upstream = 40000,
+  extend.downstream = 20000
+)
+
+# set plotting order
+levels(pbmc) <- c("CD4 Naive","CD4 Memory","CD8 Naive","CD8 Effector","DN T","NK CD56bright","NK CD56Dim","pre-B",'pro-B',"pDC","DC","CD14 Mono",'CD16 Mono')
+
+CoveragePlot(
+    object = pbmc,
+    region = "chr2-87011729-87035519",
+    features = "CD8A",
+    annotation = TRUE,
+    peaks = TRUE,
+    tile = TRUE,
+    links = TRUE
+)
+
+
+DefaultAssay(pbmc) <- "RNA"
+pbmc <- SCTransform(pbmc)
+pbmc <- RunPCA(pbmc)
+
+# build a joint neighbor graph using both assays
+pbmc <- FindMultiModalNeighbors(
+  object = pbmc,
+  reduction.list = list("pca", "lsi"), 
+  dims.list = list(1:50, 2:40),
+  modality.weight.name = "RNA.weight",
+  verbose = TRUE
+)
+
+# build a joint UMAP visualization
+pbmc <- RunUMAP(
+  object = pbmc,
+  nn.name = "weighted.nn",
+  assay = "RNA",
+  verbose = TRUE
+)
+
+DimPlot(pbmc, label = TRUE, repel = TRUE, reduction = "umap") + NoLegend()
+
+DefaultAssay(pbmc) <- "peaks"
+
+# first compute the GC content for each peak
+pbmc <- RegionStats(pbmc, genome = BSgenome.Hsapiens.UCSC.hg38)
+
+# link peaks to genes
+pbmc <- LinkPeaks(
+  object = pbmc,
+  peak.assay = "peaks",
+  expression.assay = "SCT",
+  genes.use = c("LYZ", "MS4A1")
+)
+
+idents.plot <- c("B naive", "B intermediate", "B memory",
+                 "CD14 Mono", "CD16 Mono", "CD8 TEM", "CD8 Naive")
+
+p1 <- CoveragePlot(
+  object = pbmc,
+  region = "MS4A1",
+  features = "MS4A1",
+  expression.assay = "SCT",
+  idents = idents.plot,
+  extend.upstream = 500,
+  extend.downstream = 10000
+)
+
+p2 <- CoveragePlot(
+  object = pbmc,
+  region = "LYZ",
+  features = "LYZ",
+  expression.assay = "SCT",
+  idents = idents.plot,
+  extend.upstream = 8000,
+  extend.downstream = 5000
+)
+
+patchwork::wrap_plots(p1, p2, ncol = 1)
